@@ -33,14 +33,70 @@
 
 #include "graphchi_basic_includes.hpp"
 
+#include "../collaborative_filtering/common.hpp"
+#include "../collaborative_filtering/eigen_wrapper.hpp"
+#include "../collaborative_filtering/io.hpp"
+
 using namespace graphchi;
 
 /**
   * Type definitions. Remember to create suitable graph shards using the
   * Sharder-program. 
   */
-typedef my_vertex_type VertexDataType;
-typedef my_edge_type EdgeDataType;
+
+struct custom_vogsl_edge {
+	float weight;
+	bool isActive;
+
+	custom_vogsl_edge() {
+		weight = 0;
+		isActive = false;
+	}
+
+	custom_vogsl_edge(float x) {
+		weight = x;
+		isActive = false;
+	}
+
+	bool is_active(){
+		return isActive;
+	}
+};
+
+struct custom_vogsl_vertex {
+
+	vec pvec;
+	float confidence;
+	bool seed;
+
+	custom_vogsl_vertex() {
+		pvec = zeros(D);
+		confidence = 0;
+		seed = false;
+	}
+	//this function is only called for seed nodes
+	void set_p(int index, float val){
+		pvec[index] = val;
+		seed = true;
+	}
+	//this function is only called for seed nodes
+	void set_c(float val){
+		confidence = val;
+		seed = true;
+	}
+	float get_p(int index){
+		return pvec[index];
+	}
+	float get_c(){
+		return confidence;
+	}
+};
+
+typedef custom_vogsl_vertex VertexDataType;
+typedef custom_vogsl_edge EdgeDataType;
+
+
+std::vector<VertexDataType> latent_factors_inmem;
 
 /**
   * GraphChi programs need to subclass GraphChiProgram<vertex-type, edge-type> 
@@ -54,7 +110,7 @@ struct MyGraphChiProgram : public GraphChiProgram<VertexDataType, EdgeDataType> 
      */
     void update(graphchi_vertex<VertexDataType, EdgeDataType> &vertex, graphchi_context &gcontext) {
 
-        if (ginfo.iteration == 0) {
+        if (gcontext.iteration == 0) {
             /* On first iteration, initialize vertex (and its edges). This is usually required, because
                on each run, GraphChi will modify the data files. To start from scratch, it is easiest
                do initialize the program in code. Alternatively, you can keep a copy of initial data files. */
@@ -63,12 +119,52 @@ struct MyGraphChiProgram : public GraphChiProgram<VertexDataType, EdgeDataType> 
         } else {
             /* Do computation */ 
 
-            /* Loop over in-edges (example) */
+        	VertexDataType & vdata = latent_factors_inmem[vertex.id()];
+        	if (vdata.seed || vertex.num_outedges() == 0) //if this is a seed node, don't do anything
+        		return;
+
+            /* Loop over in-edges */
+        	// Find valuable neighbours and adaptive h
             for(int i=0; i < vertex.num_inedges(); i++) {
-                // Do something
-            //    value += vertex.inedge(i).get_data();
+
+            	EdgeDataType edata = vertex.edge(i)->get_data();
+
+            	float weight = edata.weight;
+            	assert(weight != 0);
+            	VertexDataType & nbr_latent = latent_factors_inmem[vertex.edge(i)->vertex_id()];
+
+            	if ( nbr_latent.get_c() * weight > vdata.get_c() || edata.isActive )
+            	{
+            		// make edge active
+
+            		// check for adaptive h
+            	}
+
+            }
+
+            /* Loop over in-edges */
+        	// Do propagation
+            for(int i=0; i < vertex.num_inedges(); i++) {
+
+            	EdgeDataType edata = vertex.edge(i)->get_data();
+
+            	if (!edata.isActive)
+            	{
+            		continue;
+            	}
+
+            	float weight = edata.weight;
+            	assert(weight != 0);
+            	VertexDataType & nbr_latent = latent_factors_inmem[vertex.edge(i)->vertex_id()];
+
+            	// get exponential weights
+
+            	// sum up
+
             }
             
+           	// get new confidence and probabilities
+
             /* Loop over out-edges (example) */
             for(int i=0; i < vertex.num_outedges(); i++) {
                 // Do something
